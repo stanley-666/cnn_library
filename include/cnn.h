@@ -7,6 +7,8 @@ typedef enum { MAX_POOL, AVG_POOL } PoolType;
 typedef struct {
     int filterSize, stride, padding, numFilters;
     float *weights, *bias;
+    int sizeofWeights; // 用於計算梯度
+    int sizeofBias; // 用於計算梯度
 } ConvParams;
 
 typedef struct {
@@ -17,6 +19,8 @@ typedef struct {
 typedef struct {
     int inputSize, outputSize;
     float *weights, *bias;
+    int sizeofWeights; // 用於計算梯度
+    int sizeofBias; // 用於計算梯度
 } FCParams;
 
 typedef struct Layer {

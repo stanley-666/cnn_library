@@ -123,6 +123,7 @@ float *forward(CNN *net, float *input)
         switch (currentLayer->type)
         {
         case CONV:
+            printf("Forwarding Conv Layer...\n");
             forwardConv(currentLayer, currentInput);
             break;
         case POOL:
@@ -148,6 +149,11 @@ float *forward(CNN *net, float *input)
 
         // 更新到下一層
         currentInput = currentLayer->output;
+        /*
+        for (int i = 0; i < size; i++) {
+            printf("Value %d: %.2f\n", i, currentLayer->output[i]);
+        }
+        */
         currentLayer = currentLayer->next;
     }
 

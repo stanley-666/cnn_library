@@ -23,11 +23,11 @@ void* safeCalloc(size_t count, size_t size) {
 
 float activate(float x, ActivationType type) {
     switch (type) {
-    case RELU: return x > 0 ? x : 0;
-    case SIGMOID: return 1.0f / (1.0f + expf(-x));
-    case TANH: return tanhf(x);
-    case LEAKY_RELU: return x > 0 ? x : 0.01f * x;
-    case NONE: default: return x;
+        case RELU: return x > 0 ? x : 0;
+        case SIGMOID: return 1.0f / (1.0f + expf(-x));
+        case TANH: return tanhf(x);
+        case LEAKY_RELU: return x > 0 ? x : 0.01f * x;
+        case NONE: default: return x;
     }
 }
 

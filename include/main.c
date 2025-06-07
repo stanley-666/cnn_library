@@ -4,7 +4,51 @@
 #include "cnn_utils.h"
 #include "cnn_layer.h"
 #include "cnn_train.h"
+#include "Weight1.h"
+// #include "Weight2.h"
+#include "image_data_array.h"
+#include <unistd.h> // pause
+float expf(float x) {
+    float result = 1.0f;
+    float term = 1.0f;
+    for (int i = 1; i < 10; i++) { // Taylor series expansion
+        term *= x / i;
+        result += term;
+    }
+    return result;
+}
 
+// Approximate hyperbolic tangent function
+float tanhf(float x) {
+    if (x > 10) return 1.0f;  // Approximation for large x
+    if (x < -10) return -1.0f; // Approximation for very small x
+
+    float e2x = expf(2 * x);
+    return (e2x - 1) / (e2x + 1);
+}
+
+
+// Approximate square root function
+float sqrtf(float x) {
+    if (x < 0) return -1.0f; // Handle negative input
+    if (x == 0) return 0.0f;  // Square root of 0 is 0
+
+    float guess = x / 2.0f;
+    for (int i = 0; i < 10; i++) {
+        float next_guess = (guess + x / guess) / 2.0f;
+        if (fabs(next_guess - guess) < 0.000001f) break;
+        guess = next_guess;
+    }
+    return guess;
+}
+
+
+// Maximum value between two floats
+float fmaxf(float a, float b) {
+    if (a != a) return b; // Handle NaN
+    if (b != b) return a; // Handle NaN
+    return (a > b) ? a : b;
+}
 void test_single_maxpool() {
     // 建立一個 CNN
     CNN* net = createCNN();
@@ -236,12 +280,183 @@ void training_sample1() {
     freeCNN(net);
 }
 
+// 將權重從 src[ (inputChannels*filterHeight*filterWidth) ][ numFilters ]
+// 轉成連續一維陣列，排列順序為:
+// filterHeight -> filterWidth -> inputChannels -> numFilters
+
+float* convertConvWeights(
+    float *dst,
+    const float src[][32],
+    int filterHeight,
+    int filterWidth,
+    int inputChannels,
+    int outputChannels
+) {
+    int kernelArea = filterHeight * filterWidth;
+    for (int oc = 0; oc < outputChannels; ++oc) {
+        for (int ic = 0; ic < inputChannels; ++ic) {
+            for (int fh = 0; fh < filterHeight; ++fh) {
+                for (int fw = 0; fw < filterWidth; ++fw) {
+                    int k = ic * kernelArea + fh * filterWidth + fw;
+                    int dstIdx = ((oc * inputChannels + ic) * filterHeight + fh) * filterWidth + fw;
+                    dst[dstIdx] = src[k][oc];
+                }
+            }
+        }
+    }
+
+    return dst;
+}
+
+
+
+void printWeights(float *weights, int filterHeight, int filterWidth, int inputChannels, int numFilters) {
+    printf("Weights:\n");
+    for (int c = 0; c < numFilters; c++) {
+        printf("Filter %d:\n", c);
+        for (int h = 0; h < filterHeight; h++) {
+            for (int w = 0; w < filterWidth; w++) {
+                for (int ic = 0; ic < inputChannels; ic++) {
+                    printf("%.4f ", weights[(h * filterWidth + w) * inputChannels * numFilters + ic * numFilters + c]);
+                }
+                printf("\n");
+            }
+        }
+    }
+}
+
+void printoutput(float *output, int ele , int outputWidth, int outputHeight, int outputChannels) {
+    printf("Output:\n");
+    for (int i = 0; i < outputChannels*outputHeight*outputWidth; i++) {
+        printf("[%d] Element %d: %f\n", ele, i, output[i]);
+    }
+}
+
+void create_model1() {
+
+    // for density map
+    CNN* model1 = createCNN();
+    float *image = (float*)image_data; // 假設 image_data_array 是一個 float 陣列
+    int inputWidth = 512, inputHeight = 512, inputChannels = 3; // (C,H,W) 1D flatten channels first image
+    addConvLayer(model1, 3, 32, 2, 1, RELU, inputWidth, inputHeight, inputChannels);
+    Layer *layer = model1->lastLayer;
+    layer->params.conv.weights = convertConvWeights(layer->params.conv.weights, cnn_conv_1_w, 3, 3, inputChannels, 32);
+    layer->params.conv.bias = (float*)cnn_conv_1_b;
+    //printoutput(layer->output, 1, layer->outputWidth, layer->outputHeight, layer->outputChannels);
+
+    addConvLayer(model1, 3, 32, 2, 1, RELU, layer->outputWidth, layer->outputHeight, layer->outputChannels);
+    layer = model1->lastLayer;
+    layer->params.conv.weights = convertConvWeights(layer->params.conv.weights,cnn_conv_2_w, 3, 3, layer->inputChannels, 32);
+    layer->params.conv.bias = (float*)cnn_conv_2_b;
+    //printoutput(layer->output, 2, layer->outputWidth, layer->outputHeight, layer->outputChannels);
+
+    addConvLayer(model1, 3, 32, 1, 1, RELU, layer->outputWidth, layer->outputHeight, layer->outputChannels);
+    layer = model1->lastLayer;
+    layer->params.conv.weights = convertConvWeights(layer->params.conv.weights,cnn_conv_3_w, 3, 3, layer->inputChannels, 32);
+    layer->params.conv.bias = (float*)cnn_conv_3_b;
+    //printoutput(layer->output, 3, layer->outputWidth, layer->outputHeight, layer->outputChannels);
+
+    addConvLayer(model1, 3, 32, 1, 1, RELU, layer->outputWidth, layer->outputHeight, layer->outputChannels);
+    layer = model1->lastLayer;
+    layer->params.conv.weights = convertConvWeights(layer->params.conv.weights,cnn_conv_4_w, 3, 3, layer->inputChannels, 32);
+    layer->params.conv.bias = (float*)cnn_conv_4_b;
+    //printoutput(layer->output, 4, layer->outputWidth, layer->outputHeight, layer->outputChannels);
+
+    addConvLayer(model1, 3, 32, 1, 1, RELU, layer->outputWidth, layer->outputHeight, layer->outputChannels);
+    layer = model1->lastLayer;
+    layer->params.conv.weights = convertConvWeights(layer->params.conv.weights,cnn_conv_5_w, 3, 3, layer->inputChannels, 32);
+    layer->params.conv.bias = (float*)cnn_conv_5_b;
+    //printoutput(layer->output, 5, layer->outputWidth, layer->outputHeight, layer->outputChannels);
+
+    addConvLayer(model1, 3, 32, 1, 1, RELU, layer->outputWidth, layer->outputHeight, layer->outputChannels);
+    layer = model1->lastLayer;
+    layer->params.conv.weights = convertConvWeights(layer->params.conv.weights,cnn_conv_6_w, 3, 3, layer->inputChannels, 32);
+    layer->params.conv.bias = (float*)cnn_conv_6_b;
+    //printoutput(layer->output, 6, layer->outputWidth, layer->outputHeight, layer->outputChannels);
+
+    addConvLayer(model1, 3, 32, 1, 1, RELU, layer->outputWidth, layer->outputHeight, layer->outputChannels);
+    layer = model1->lastLayer;
+    layer->params.conv.weights = convertConvWeights(layer->params.conv.weights, cnn_conv_7_w, 3, 3, layer->inputChannels, 32);
+    layer->params.conv.bias = (float*)cnn_conv_7_b;
+    //printoutput(layer->output, 7, layer->outputWidth, layer->outputHeight, layer->outputChannels);
+
+    addConvLayer(model1, 3, 32, 1, 1, RELU, layer->outputWidth, layer->outputHeight, layer->outputChannels);
+    layer = model1->lastLayer;
+    layer->params.conv.weights = convertConvWeights(layer->params.conv.weights, cnn_conv_8_w, 3, 3, layer->inputChannels, 32);
+    layer->params.conv.bias = (float*)cnn_conv_8_b;
+    //printoutput(layer->output, 8, layer->outputWidth, layer->outputHeight, layer->outputChannels);
+
+    addConvLayer(model1, 3, 32, 1, 1, RELU, layer->outputWidth, layer->outputHeight, layer->outputChannels);
+    layer = model1->lastLayer;
+    layer->params.conv.weights = convertConvWeights(layer->params.conv.weights, cnn_conv_9_w, 3, 3, layer->inputChannels, 32);
+    layer->params.conv.bias = (float*)cnn_conv_9_b;
+    //printoutput(layer->output, 9, layer->outputWidth, layer->outputHeight, layer->outputChannels);
+
+    addConvLayer(model1, 1, 1, 1, 0, NONE, layer->outputWidth, layer->outputHeight, layer->outputChannels);
+    layer = model1->lastLayer;
+    layer->params.conv.weights = (float*)cnn_conv_10_w;
+    layer->params.conv.bias = (float*)cnn_conv_10_b;
+
+    forward(model1, image);
+    layer = model1->lastLayer;
+    printoutput(layer->output, 10, layer->outputWidth, layer->outputHeight, layer->outputChannels);
+
+
+}
+
+void create_model2() {
+    /*
+    128x128x1 圖片
+
+    到(kernel_size, kernel, strdie)
+    3-32-2 -> 4-32-4 -> 4-8-4 -> 4-1-1
+    */
+    // for density map
+    CNN* density_map = createCNN();
+    int inputWidth = 128, inputHeight = 128, inputChannels = 1;
+    addConvLayer(density_map, 3, 32, 2, 1, RELU, inputWidth, inputHeight, inputChannels);
+    Layer *layer = density_map->lastLayer;
+    layer->params.conv.weights = (float*)cnn_conv_1_w;
+    layer->params.conv.bias = (float*)cnn_conv_1_b;
+    printf("cnn_conv_1_w %f, %f\n", *layer->params.conv.weights, *layer->params.conv.bias ) ;
+    addConvLayer(density_map, 4, 32, 4, 1, RELU, layer->outputWidth, layer->outputHeight, layer->outputChannels);
+    layer = density_map->lastLayer;
+    layer->params.conv.weights = (float*)cnn_conv_2_w;
+    layer->params.conv.bias = (float*)cnn_conv_2_b;
+    addConvLayer(density_map, 4, 8, 4, 1, RELU, layer->outputWidth, layer->outputHeight, layer->outputChannels);
+    layer = density_map->lastLayer;
+    layer->params.conv.weights = (float*)cnn_conv_3_w;
+    layer->params.conv.bias = (float*)cnn_conv_3_b;
+    addConvLayer(density_map, 4, 1, 1, 0, NONE, layer->outputWidth, layer->outputHeight, layer->outputChannels);
+    layer = density_map->lastLayer;
+    layer->params.conv.weights = (float*)cnn_conv_4_w;
+    layer->params.conv.bias = (float*)cnn_conv_4_b;
+}
+
+
+void test_model1() {
+
+    // for density map
+    CNN* model1 = createCNN();
+    float *image = (float*)image_data; // 假設 image_data_array 是一個 float 陣列
+    int inputWidth = 512, inputHeight = 512, inputChannels = 3;
+    addConvLayer(model1, 3, 32, 2, 1, RELU, inputWidth, inputHeight, inputChannels);
+    Layer *layer = model1->lastLayer;
+    layer->params.conv.weights = convertConvWeights(layer->params.conv.weights, cnn_conv_1_w, 3, 3, inputChannels, 32);
+    layer->params.conv.bias = (float*)cnn_conv_1_b;
+    printWeights(layer->params.conv.weights, 3, 3, inputChannels, 32);
+    //printoutput(layer->output, 1, layer->outputWidth, layer->outputHeight, layer->outputChannels);
+    forward(model1, image);
+    layer = model1->lastLayer;
+}
+
 int main() {
-    training_sample1();
-    //create_cnn_sample();
-    test_single_maxpool();
-    test_single_avgpool();
-    test_single_conv();
-    test_single_fc();
+    // input: [C][H][W] flattened
+    // paddedInput: [C][H+2P][W+2P] flattened
+    // weights: [OC][IC][FH][FW] flattened
+    // output: [OC][OH][OW] flattened
+
+    create_model1();
+    //test_model1();
     return 0;
 }

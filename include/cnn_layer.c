@@ -31,17 +31,19 @@ void addConvLayer(CNN *net, int filterSize, int numFilters, int stride, int padd
     layer->outputHeight = ((inputHeight + (2 * padding) - filterSize) / stride) + 1;
     layer->outputChannels = numFilters;
 
+    printf("Conv Layer: Input: %dx%dx%d, Output: %dx%dx%d, FilterSize: %d, NumFilters: %d\n",
+           inputWidth, inputHeight, inputChannels,
+           layer->outputWidth, layer->outputHeight, layer->outputChannels,
+           filterSize, numFilters);
     // 分配權重和偏置空間
-    int weightSize = filterSize * filterSize * inputChannels * numFilters;
-    layer->params.conv.weights = (float *)safeCalloc(weightSize, sizeof(float));
+    layer->params.conv.sizeofWeights = filterSize * filterSize * inputChannels * numFilters;
+    layer->params.conv.weights = (float *)safeCalloc(layer->params.conv.sizeofWeights, sizeof(float));
     layer->params.conv.bias = (float *)safeCalloc(numFilters, sizeof(float));
 
     // 使用He初始化weights
-    float scale = sqrtf(2.0f / (inputChannels * filterSize * filterSize));
-    for (int i = 0; i < weightSize; i++)
-    {
-        layer->params.conv.weights[i] = ((float)rand() / RAND_MAX * 2.0f - 1.0f) * scale;
-    }
+    //float scale = sqrtf(2.0f / (inputChannels * filterSize * filterSize));
+
+    // 有初始的WEIGHTS所以這邊沒用
 
     for (int i = 0; i < numFilters; i++)
     {
@@ -50,6 +52,7 @@ void addConvLayer(CNN *net, int filterSize, int numFilters, int stride, int padd
 
     // 分配輸出空間
     int outputSize = layer->outputWidth * layer->outputHeight * layer->outputChannels;
+    //printf("Output Size: %d\n", outputSize);
     layer->output = (float *)safeCalloc(outputSize, sizeof(float));
 
     // 將層添加到網絡
@@ -71,6 +74,12 @@ void addConvLayer(CNN *net, int filterSize, int numFilters, int stride, int padd
            inputWidth, inputHeight, inputChannels,
            layer->outputWidth, layer->outputHeight, layer->outputChannels,
            filterSize, numFilters);
+    // 驗證參數正確性
+    // 驗證參數正確性
+    printf("Total weights: %d, Biases: %d, Output size: %d\n",
+       layer->params.conv.sizeofWeights, numFilters,
+       outputSize);
+
 }
 
 // 為CNN添加池化層
@@ -189,7 +198,8 @@ void addFCLayer(CNN *net, int outputSize, ActivationType activation, int inputSi
 
 // 前向傳播卷積層
 void forwardConv(Layer *layer, float *input)
-{
+{   
+    // [ outputChannels, inputChannels, filterHeight, filterWidth ]
     //printf("Forwarding Conv Layer...\n");
     int outW = layer->outputWidth;
     int outH = layer->outputHeight;
@@ -200,21 +210,13 @@ void forwardConv(Layer *layer, float *input)
     int filterSize = layer->params.conv.filterSize; // kernel size
     int stride = layer->params.conv.stride;
     int padding = layer->params.conv.padding;
-    /*
-    //printf("=== Convolution Layer Parameters ===\n");
-    //printf("Input  (W x H x C): %d x %d x %d\n", inW, inH, inC);
-    //printf("Output (W x H x C): %d x %d x %d\n", outW, outH, outC);
-    //printf("Filter Size: %d\n", filterSize);
-    //printf("Stride: %d\n", stride);
-    //printf("Padding: %d\n", padding);
-    //printf("====================================\n");
-    */
     if (inW <= 0 || inH <= 0 || inC <= 0 || padding < 0) {
         printf("Invalid input dimensions or padding in convolution\n");
         exit(EXIT_FAILURE);
     }
 
     // padding = 1 矩陣外維繞一圈補0
+    
     int paddedW = inW + 2 * padding;
     int paddedH = inH + 2 * padding;
 
@@ -223,60 +225,21 @@ void forwardConv(Layer *layer, float *input)
         printf("Memory allocation failed for padded input in convolution\n");
         exit(EXIT_FAILURE);
     }
-/*
-    Input:
-    +---+---+---+---+
-    | 1 | 2 | 3 | 4 |
-    +---+---+---+---+
-    | 5 | 6 | 7 | 8 |  (inW = 4, inH = 4)
-    +---+---+---+---+
-    | 9 | 10| 11| 12|
-    +---+---+---+---+
-    | 13| 14| 15| 16|
-    +---+---+---+---+
 
-    Padding (padding = 1):
-    +---+---+---+---+---+---+
-    | 0 | 0 | 0 | 0 | 0 | 0 |
-    +---+---+---+---+---+---+
-    | 0 | 1 | 2 | 3 | 4 | 0 |
-    +---+---+---+---+---+---+
-    | 0 | 5 | 6 | 7 | 8 | 0 |  (paddedW = 6, paddedH = 6)
-    +---+---+---+---+---+---+
-    | 0 | 9 | 10| 11| 12| 0 |
-    +---+---+---+---+---+---+
-    | 0 | 13| 14| 15| 16| 0 |
-    +---+---+---+---+---+---+
-    | 0 | 0 | 0 | 0 | 0 | 0 |
-    +---+---+---+---+---+---+
-*/
+    int inputIndex = 0, paddedIndex = 0;
     for (int c = 0; c < inC; c++) {
         for (int h = 0; h < inH; h++) {
             for (int w = 0; w < inW; w++) {
-                int inputIndex = c * inH * inW + h * inW + w;
-                int paddedIndex = c * paddedH * paddedW + (h + padding) * paddedW + (w + padding);
+                inputIndex = c * inH * inW + h * inW + w;
+                //printf("inputIndex: %d, c: %d, h: %d, w: %d, paddedW: %d, paddedH: %d\n", inputIndex, c, h, w, paddedW, paddedH);
+                paddedIndex = c * paddedH * paddedW + (h + padding) * paddedW + (w + padding);
+                //printf("paddedIndex: %d, c: %d, h: %d, w: %d\n", paddedIndex, c, h + padding, w + padding);
                 paddedInput[paddedIndex] = input[inputIndex];
             }
         }
+        printf("intput index %d, padded index %d\n", inputIndex, paddedIndex);
     }
 
-    /*
-    Padded Input:             Kernel (filterSize = 3):
-
-    +---+---+---+---+---+---+    +---+---+---+
-    | 0 | 0 | 0 | 0 | 0 | 0 |    | w1| w2| w3|
-    +---+---+---+---+---+---+    +---+---+---+
-    | 0 | 1 | 2 | 3 | 4 | 0 |    | w4| w5| w6|
-    +---+---+---+---+---+---+    +---+---+---+
-    | 0 | 5 | 6 | 7 | 8 | 0 |    | w7| w8| w9|
-    +---+---+---+---+---+---+    +---+---+---+
-    | 0 | 9 | 10| 11| 12| 0 |
-    +---+---+---+---+---+---+
-    | 0 | 13| 14| 15| 16| 0 |
-    +---+---+---+---+---+---+
-    | 0 | 0 | 0 | 0 | 0 | 0 |
-    +---+---+---+---+---+---+
-*/
 // 被kernel掃到的對應的值相乘之後的總和為卷積的其中之一結果(conv.weight)
 // output size設很小，代表kernel只會掃一部分
     for (int oc = 0; oc < outC; oc++) {
@@ -306,7 +269,16 @@ void forwardConv(Layer *layer, float *input)
                 sum += layer->params.conv.bias[oc];
 
                 // 經過activation function存到output
-                layer->output[(oc * outH + oh) * outW + ow] = activate(sum, layer->activation);
+                float temp = activate(sum, layer->activation);
+                //printf("Conv output[%d][%d][%d] = %f\n", oc, oh, ow, temp);
+                int idx = (oc * outH + oh) * outW + ow;
+                //printf("Conv output %d [%d][%d][%d] = %f\n",idx,  oc, oh, ow, temp);
+                if (isnan(temp) || isinf(temp)) {
+                    printf("Invalid output value at [%d][%d][%d]: %f\n", oc, oh, ow, temp);
+                    exit(EXIT_FAILURE);
+                }
+                layer->output[(oc * outH + oh) * outW + ow] = temp;
+
             }
         }
     }
