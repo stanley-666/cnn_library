@@ -13,6 +13,7 @@ void* safeMalloc(size_t size) {
 }
 
 void* safeCalloc(size_t count, size_t size) {
+    printf("Allocating %zu elements of size %zu bytes each, total: %zu bytes\n", count, size, count * size);
     void* ptr = calloc(count, size); // Allocates memory and initializes it to 0
     if (ptr == NULL) {
         fprintf(stderr, "Memory allocation failed! Requested size: %zu bytes\n", count * size);

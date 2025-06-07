@@ -4,9 +4,9 @@
 #include "cnn_layer.h"
 #include "cnn_utils.h"
 
-void addConvLayer(CNN *net, int filterSize, int numFilters, int stride, int padding, ActivationType activation, int inputWidth, int inputHeight, int inputChannels)
+void addConvLayer(CNN *net, int filterSize, int numFilters, int stride, int padding,
+                  ActivationType activation, int inputWidth, int inputHeight, int inputChannels)
 {
-  
     if (!validateConvParams(inputWidth, inputHeight, filterSize, stride, padding)) {
         exit(EXIT_FAILURE);
     }
@@ -16,71 +16,62 @@ void addConvLayer(CNN *net, int filterSize, int numFilters, int stride, int padd
     layer->activation = activation;
 
     // 設置卷積層參數
-    layer->params.conv.filterSize = filterSize; // kernel是幾乘幾的
-    layer->params.conv.numFilters = numFilters; // 幾個feature map
-    layer->params.conv.stride = stride;
-    layer->params.conv.padding = padding;
+    layer->params.conv.filterSize = filterSize;
+    layer->params.conv.numFilters = numFilters;
+    layer->params.conv.stride     = stride;
+    layer->params.conv.padding    = padding;
 
-    // 設置輸入尺寸
-    layer->inputWidth = inputWidth;
-    layer->inputHeight = inputHeight;
-    layer->inputChannels = inputChannels;
-
-    // 計算輸出尺寸
-    layer->outputWidth = ((inputWidth + (2 * padding) - filterSize) / stride) + 1;
-    layer->outputHeight = ((inputHeight + (2 * padding) - filterSize) / stride) + 1;
+    // 設置輸入／輸出尺寸
+    layer->inputWidth   = inputWidth;
+    layer->inputHeight  = inputHeight;
+    layer->inputChannels= inputChannels;
+    layer->outputWidth  = ((inputWidth  + 2*padding - filterSize) / stride) + 1;
+    layer->outputHeight = ((inputHeight + 2*padding - filterSize) / stride) + 1;
     layer->outputChannels = numFilters;
 
-    printf("Conv Layer: Input: %dx%dx%d, Output: %dx%dx%d, FilterSize: %d, NumFilters: %d\n",
-           inputWidth, inputHeight, inputChannels,
-           layer->outputWidth, layer->outputHeight, layer->outputChannels,
-           filterSize, numFilters);
-    // 分配權重和偏置空間
-    layer->params.conv.sizeofWeights = filterSize * filterSize * inputChannels * numFilters;
-    layer->params.conv.weights = (float *)safeCalloc(layer->params.conv.sizeofWeights, sizeof(float));
-    layer->params.conv.bias = (float *)safeCalloc(numFilters, sizeof(float));
+    // 分配權重和偏置
+    int wcount = filterSize * filterSize * inputChannels * numFilters;
+    int bcount = numFilters;
+    layer->params.conv.sizeofWeights = wcount;
+    layer->params.conv.sizeofBias    = bcount;
+    layer->params.conv.weights = (float *)safeCalloc(wcount, sizeof(float));
+    layer->params.conv.bias    = (float *)safeCalloc(bcount, sizeof(float));
 
-    // 使用He初始化weights
-    //float scale = sqrtf(2.0f / (inputChannels * filterSize * filterSize));
-
-    // 有初始的WEIGHTS所以這邊沒用
-
-    for (int i = 0; i < numFilters; i++)
-    {
-        layer->params.conv.bias[i] = 0.0f;
-    }
+    // bias 初值設 0
+    for (int i = 0; i < bcount; i++) layer->params.conv.bias[i] = 0.0f;
 
     // 分配輸出空間
     int outputSize = layer->outputWidth * layer->outputHeight * layer->outputChannels;
-    //printf("Output Size: %d\n", outputSize);
     layer->output = (float *)safeCalloc(outputSize, sizeof(float));
 
-    // 將層添加到網絡
+    // **在這裡一次把你想要的全部印出來：**
+    printf("=== Added Conv Layer ===\n");
+    printf(" Activation: %s\n",
+        layer->activation==RELU      ? "RELU" :
+        layer->activation==SIGMOID   ? "SIGMOID" :
+        layer->activation==TANH      ? "TANH" :
+        layer->activation==LEAKY_RELU? "LEAKY_RELU" : "NONE");
+    printf(" Input  : %d x %d x %d\n",
+           layer->inputWidth, layer->inputHeight, layer->inputChannels);
+    printf(" Output : %d x %d x %d\n",
+           layer->outputWidth, layer->outputHeight, layer->outputChannels);
+    printf(" Kernel : %d x %d\n", filterSize, filterSize);
+    printf(" Stride : %d, Padding: %d\n", stride, padding);
+    printf(" NumFilters: %d\n", numFilters);
+    printf(" Weights count: %d, Bias count: %d\n",
+           layer->params.conv.sizeofWeights,
+           layer->params.conv.sizeofBias);
+    printf("=========================\n");
+
+    // 把 layer 掛到 net 上
     layer->prev = net->lastLayer;
     layer->next = NULL;
-    if (net->lastLayer == NULL)
-    {
-        net->firstLayer = layer;
-    }
-    else
-    {
-        net->lastLayer->next = layer;
-    }
-
+    if (net->lastLayer) net->lastLayer->next = layer;
+    else                net->firstLayer = layer;
     net->lastLayer = layer;
     net->numLayers++;
-    
-    printf("Added Conv Layer: Input: %dx%dx%d, Output: %dx%dx%d, FilterSize: %d, NumFilters: %d\n",
-           inputWidth, inputHeight, inputChannels,
-           layer->outputWidth, layer->outputHeight, layer->outputChannels,
-           filterSize, numFilters);
-    // 驗證參數正確性
-    // 驗證參數正確性
-    printf("Total weights: %d, Biases: %d, Output size: %d\n",
-       layer->params.conv.sizeofWeights, numFilters,
-       outputSize);
-
 }
+
 
 // 為CNN添加池化層
 void addPoolLayer(CNN *net, int poolSize, int stride, PoolType poolType, int inputWidth, int inputHeight, int inputChannels)
@@ -220,7 +211,7 @@ void forwardConv(Layer *layer, float *input)
     int paddedW = inW + 2 * padding;
     int paddedH = inH + 2 * padding;
 
-    float *paddedInput = (float *)calloc(paddedW * paddedH * inC, sizeof(float));
+    float *paddedInput = (float *)safeCalloc(paddedW * paddedH * inC, sizeof(float));
     if (!paddedInput) {
         printf("Memory allocation failed for padded input in convolution\n");
         exit(EXIT_FAILURE);
@@ -258,25 +249,30 @@ void forwardConv(Layer *layer, float *input)
                             if (ih >= 0 && ih < paddedH && iw >= 0 && iw < paddedW) {
                                 int paddedIdx = ic * paddedH * paddedW + ih * paddedW + iw;
                                 int filterIdx = baseIdx + fh * filterSize + fw;
-
-                                sum += paddedInput[paddedIdx] * layer->params.conv.weights[filterIdx];
+                                float temp = paddedInput[paddedIdx] * layer->params.conv.weights[filterIdx];
+                                //printf("temp = paddedInput[%d] * layer->params.conv.weights[%d] = %f * %f = %f\n", 
+                                //paddedIdx, filterIdx, paddedInput[paddedIdx], layer->params.conv.weights[filterIdx],temp);
+                             
+                                sum += temp;
+                                
                             }
                         }
                     }
                 }
 
                 // 加上 bias
-                sum += layer->params.conv.bias[oc];
-
+                //sum += layer->params.conv.bias[oc];
+                //printf("sum %f\n ", sum);
                 // 經過activation function存到output
                 float temp = activate(sum, layer->activation);
                 //printf("Conv output[%d][%d][%d] = %f\n", oc, oh, ow, temp);
-                int idx = (oc * outH + oh) * outW + ow;
+                //int idx = (oc * outH + oh) * outW + ow;
                 //printf("Conv output %d [%d][%d][%d] = %f\n",idx,  oc, oh, ow, temp);
                 if (isnan(temp) || isinf(temp)) {
                     printf("Invalid output value at [%d][%d][%d]: %f\n", oc, oh, ow, temp);
                     exit(EXIT_FAILURE);
                 }
+                printf("Conv output[%d][%d][%d] = %f\n", oc, oh, ow, temp);
                 layer->output[(oc * outH + oh) * outW + ow] = temp;
 
             }
