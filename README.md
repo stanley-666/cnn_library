@@ -1,7 +1,7 @@
 # build
 
 ```bash
-git@github.com:stanley-666/cnn_library.git
+git clone git@github.com:stanley-666/cnn_library.git
 chmod +x build.sh
 ./build.sh
 ````
